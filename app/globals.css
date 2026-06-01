@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F5F2EC;
+  --surface: #FFFDF8;
+  --surface2: #EDE9E0;
+  --accent: #C4622D;
+  --mateus: #3B6EA5;
+  --esposa: #7B5EA7;
+  --text: #1A1714;
+  --muted: #7A7469;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text);
+  font-family: Inter, system-ui, sans-serif;
+  min-height: 100dvh;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #EDE9E0;
+  border-radius: 2px;
+}
