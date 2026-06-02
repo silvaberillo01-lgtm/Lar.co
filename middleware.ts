@@ -28,11 +28,18 @@ export async function middleware(request: NextRequest) {
   const publicPaths = ['/login', '/onboarding']
   const isPublic = publicPaths.some(p => pathname.startsWith(p))
 
+  // Usuário não autenticado → login
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // Usuário autenticado na raiz → agora
   if (user && pathname === '/') {
+    return NextResponse.redirect(new URL('/agora', request.url))
+  }
+
+  // Usuário autenticado tentando acessar login → agora
+  if (user && pathname.startsWith('/login')) {
     return NextResponse.redirect(new URL('/agora', request.url))
   }
 
