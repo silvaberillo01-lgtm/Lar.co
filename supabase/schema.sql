@@ -100,3 +100,26 @@ create policy "own sleep_logs" on sleep_logs for all using (profile_id = auth.ui
 create policy "household market_items" on market_items for all using (
   household_id in (select household_id from profiles where id = auth.uid())
 );
+
+-- RPC: criar household (security definer ignora RLS)
+create or replace function create_household(p_name text, p_invite_code text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  insert into households (name, invite_code) values (p_name, p_invite_code) returning id into v_id;
+  update profiles set household_id = v_id where id = auth.uid();
+  return v_id;
+end;
+$$;
+
+-- RPC: entrar em household pelo código
+create or replace function join_household(p_invite_code text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  select id into v_id from households where invite_code = upper(p_invite_code);
+  if v_id is null then raise exception 'Código inválido'; end if;
+  update profiles set household_id = v_id where id = auth.uid();
+  return v_id;
+end;
+$$;

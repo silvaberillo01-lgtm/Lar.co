@@ -56,36 +56,23 @@ export default function OnboardingPage() {
     setLoading(true)
 
     try {
-      let householdId: string
-
       if (mode === 'create') {
         const code = Math.random().toString(36).substring(2, 8).toUpperCase()
-        const { data, error } = await (supabase as any)
-          .from('households')
-          .insert({ name: householdName, invite_code: code })
-          .select()
-          .single()
-        if (error) throw new Error('Erro ao criar lar: ' + error.message)
-        householdId = data.id
+        const { error } = await (supabase as any).rpc('create_household', {
+          p_name: householdName,
+          p_invite_code: code,
+        })
+        if (error) throw new Error(error.message)
       } else {
-        const { data, error } = await (supabase as any)
-          .from('households')
-          .select()
-          .eq('invite_code', inviteCode.toUpperCase())
-          .single()
-        if (error || !data) { alert('Código inválido ou não encontrado'); setLoading(false); return }
-        householdId = data.id
+        const { error } = await (supabase as any).rpc('join_household', {
+          p_invite_code: inviteCode.toUpperCase(),
+        })
+        if (error) throw new Error(error.message)
       }
-
-      const { error: profileError } = await (supabase as any)
-        .from('profiles')
-        .update({ household_id: householdId })
-        .eq('id', userId)
-      if (profileError) throw new Error('Erro ao salvar perfil: ' + profileError.message)
 
       router.push('/agora')
     } catch (err: any) {
-      alert(err.message ?? 'Ocorreu um erro. Tente novamente.')
+      alert('Erro: ' + (err.message ?? 'Tente novamente.'))
       setLoading(false)
     }
   }
