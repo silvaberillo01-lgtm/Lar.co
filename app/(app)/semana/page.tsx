@@ -3,8 +3,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '@/lib/stores/appStore'
 import { createClient } from '@/lib/supabase/client'
 import { getCategoryConfig } from '@/lib/utils/categories'
-import { fmtDur, formatDate } from '@/lib/utils/time'
-import type { DayBlock } from '@/lib/supabase/types'
+import { fmtDur, formatDate, frequencyMatchesDay } from '@/lib/utils/time'
+import type { DayBlock, RoutineBlock } from '@/lib/supabase/types'
 
 function getWeekDates(offset = 0) {
   const now = new Date()
@@ -18,29 +18,75 @@ function getWeekDates(offset = 0) {
 }
 
 export default function SemanaPage() {
-  const { activePerson } = useAppStore()
+  const { activePerson, householdId } = useAppStore()
   const [weekOffset, setWeekOffset] = useState(0)
-  const [blocks, setBlocks] = useState<DayBlock[]>([])
+  const [dayBlocks, setDayBlocks] = useState<DayBlock[]>([])
+  const [routines, setRoutines] = useState<RoutineBlock[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
   const dates = getWeekDates(weekOffset)
 
-  const fetch = useCallback(async () => {
-    if (!activePerson) return
+  const fetchData = useCallback(async () => {
+    if (!activePerson || !householdId) return
     setLoading(true)
-    const { data } = await (supabase as any)
-      .from('day_blocks')
-      .select('*')
-      .eq('profile_id', activePerson)
-      .gte('date', dates[0])
-      .lte('date', dates[6]) as { data: DayBlock[] | null }
-    setBlocks(data ?? [])
+
+    const [dbResult, routineResult] = await Promise.all([
+      (supabase as any)
+        .from('day_blocks')
+        .select('*')
+        .eq('profile_id', activePerson)
+        .gte('date', dates[0])
+        .lte('date', dates[6]),
+      (supabase as any)
+        .from('routine_blocks')
+        .select('*')
+        .eq('household_id', householdId)
+        .eq('active', true),
+    ])
+
+    setDayBlocks(dbResult.data ?? [])
+    setRoutines(routineResult.data ?? [])
     setLoading(false)
-  }, [activePerson, dates[0], supabase]) // eslint-disable-line
+  }, [activePerson, householdId, dates[0]]) // eslint-disable-line
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => { fetchData() }, [fetchData])
 
-  const totalMin = blocks.filter(b => b.status === 'done').reduce((s, b) => s + (b.actual_duration ?? b.planned_duration ?? 0), 0)
+  // Para cada dia, mescla day_blocks reais com projeções de rotina
+  function getBlocksForDay(date: string) {
+    const real = dayBlocks.filter(b => b.date === date)
+    const realRoutineIds = new Set(real.map(b => b.routine_block_id).filter(Boolean))
+
+    const dateObj = new Date(date + 'T00:00:00')
+    const projected = routines
+      .filter(r =>
+        !realRoutineIds.has(r.id) &&
+        frequencyMatchesDay(r.frequency ?? '', dateObj)
+      )
+      .map(r => ({
+        id: 'proj-' + r.id + '-' + date,
+        name: r.name,
+        category: r.category,
+        status: 'planejado',
+        actual_duration: r.duration_minutes,
+        planned_duration: r.duration_minutes,
+        planned_start: r.start_time,
+        actual_start: r.start_time,
+      } as DayBlock))
+
+    return [...real, ...projected].sort((a, b) =>
+      (a.planned_start ?? '').localeCompare(b.planned_start ?? '')
+    )
+  }
+
+  const allBlocks = dates.flatMap(d => getBlocksForDay(d))
+  const totalMin = allBlocks
+    .filter(b => b.status === 'done' || b.status === 'partial')
+    .reduce((s, b) => s + (b.actual_duration ?? b.planned_duration ?? 0), 0)
+  const plannedMin = allBlocks
+    .filter(b => b.status === 'planejado')
+    .reduce((s, b) => s + (b.actual_duration ?? b.planned_duration ?? 0), 0)
+
+  const today = new Date().toISOString().split('T')[0]
 
   return (
     <div className="px-4 pt-6 pb-4 max-w-lg mx-auto">
@@ -55,9 +101,15 @@ export default function SemanaPage() {
         </div>
       </div>
 
-      <div className="bg-surface rounded-2xl px-4 py-3 mb-4 flex items-center gap-2">
-        <span className="text-lg">⏱</span>
-        <span className="text-sm">Total: <strong>{fmtDur(totalMin)}</strong> de atividades concluídas</span>
+      <div className="flex gap-2 mb-4">
+        <div className="flex-1 bg-surface rounded-2xl px-4 py-3">
+          <div className="text-xs text-muted mb-0.5">Concluído</div>
+          <div className="font-bold text-sm">{fmtDur(totalMin)}</div>
+        </div>
+        <div className="flex-1 bg-surface rounded-2xl px-4 py-3">
+          <div className="text-xs text-muted mb-0.5">Planejado</div>
+          <div className="font-bold text-sm">{fmtDur(plannedMin)}</div>
+        </div>
       </div>
 
       {loading ? (
@@ -67,28 +119,39 @@ export default function SemanaPage() {
       ) : (
         <div className="space-y-2">
           {dates.map(date => {
-            const dayBlocks = blocks.filter(b => b.date === date)
+            const dayBlocksForDate = getBlocksForDay(date)
             const dayName = new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short' })
+            const isToday = date === today
             return (
-              <div key={date} className="bg-surface rounded-2xl px-4 py-3">
+              <div key={date}
+                className="bg-surface rounded-2xl px-4 py-3"
+                style={{ outline: isToday ? '2px solid #C4622D' : 'none' }}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-semibold text-muted capitalize w-8">{dayName}</span>
+                  <span className={`text-xs font-semibold capitalize w-8 ${isToday ? 'text-accent' : 'text-muted'}`}>{dayName}</span>
                   <span className="text-xs text-muted">{formatDate(date)}</span>
+                  {isToday && <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full font-medium">hoje</span>}
                   <span className="ml-auto text-xs text-muted">
-                    {fmtDur(dayBlocks.filter(b => b.status === 'done').reduce((s, b) => s + (b.actual_duration ?? b.planned_duration ?? 0), 0))}
+                    {dayBlocksForDate.length} bloco{dayBlocksForDate.length !== 1 ? 's' : ''}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {dayBlocks.map(b => {
+                  {dayBlocksForDate.map(b => {
                     const cat = getCategoryConfig(b.category)
+                    const faded = b.status === 'skipped'
                     return (
-                      <span key={b.id} className="text-xs px-2 py-0.5 rounded-full font-medium"
-                        style={{ backgroundColor: cat.bg, color: cat.tc }}>
+                      <span key={b.id}
+                        className="text-xs px-2 py-0.5 rounded-full font-medium"
+                        style={{
+                          backgroundColor: cat.bg,
+                          color: cat.tc,
+                          opacity: faded ? 0.4 : 1,
+                          textDecoration: b.status === 'done' ? 'line-through' : 'none',
+                        }}>
                         {cat.emoji} {b.name}
                       </span>
                     )
                   })}
-                  {dayBlocks.length === 0 && <span className="text-xs text-muted">Sem atividades</span>}
+                  {dayBlocksForDate.length === 0 && <span className="text-xs text-muted">Sem atividades</span>}
                 </div>
               </div>
             )

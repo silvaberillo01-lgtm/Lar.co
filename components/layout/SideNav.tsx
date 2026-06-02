@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', emoji: '📊' },
   { href: '/semana', label: 'Semana', emoji: '📅' },
   { href: '/mercado', label: 'Mercado', emoji: '🛒' },
+  { href: '/config', label: 'Configurações', emoji: '⚙️' },
 ]
 
 export function SideNav() {

@@ -6,8 +6,8 @@ const NAV_ITEMS = [
   { href: '/agora', label: 'Agora', emoji: '⚡' },
   { href: '/hoje', label: 'Hoje', emoji: '📋' },
   { href: '/rotina', label: 'Rotina', emoji: '🔄' },
-  { href: '/dashboard', label: 'Dados', emoji: '📊' },
   { href: '/mercado', label: 'Mercado', emoji: '🛒' },
+  { href: '/config', label: 'Config', emoji: '⚙️' },
 ]
 
 export function BottomNav() {
