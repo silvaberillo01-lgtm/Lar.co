@@ -18,11 +18,28 @@ export default function OnboardingPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) router.push('/login')
-      else setUserId(data.user.id)
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) { router.push('/login'); return }
+      setUserId(data.user.id)
+
+      // Se perfil já existe com nome, pula para o step do household
+      const { data: profile } = await (supabase as any)
+        .from('profiles')
+        .select('name, avatar_color, household_id')
+        .eq('id', data.user.id)
+        .single()
+
+      if (profile?.household_id) {
+        router.push('/agora')
+        return
+      }
+      if (profile?.name) {
+        setName(profile.name)
+        setColor(profile.avatar_color ?? COLORS[0])
+        setStep('household')
+      }
     })
-  }, [supabase, router])
+  }, []) // eslint-disable-line
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault()
