@@ -37,9 +37,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     init()
   }, []) // eslint-disable-line
 
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   return (
     <div className="min-h-dvh bg-background">
       <SideNav />
+      {/* Mobile: botão de logout fixo no topo direito */}
+      <button
+        onClick={handleLogout}
+        className="md:hidden fixed top-4 right-4 z-50 w-9 h-9 bg-surface border border-surface2 rounded-full flex items-center justify-center text-muted shadow-sm active:opacity-70"
+        title="Sair"
+      >
+        🚪
+      </button>
       <main className="md:ml-56 pb-20 md:pb-0">
         {children}
       </main>
