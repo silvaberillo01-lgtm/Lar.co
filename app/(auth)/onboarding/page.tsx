@@ -38,28 +38,39 @@ export default function OnboardingPage() {
     if (!userId) return
     setLoading(true)
 
-    let householdId: string
+    try {
+      let householdId: string
 
-    if (mode === 'create') {
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase()
-      const { data } = await (supabase as any)
-        .from('households')
-        .insert({ name: householdName, invite_code: code })
-        .select()
-        .single() as { data: { id: string } | null }
-      householdId = data!.id
-    } else {
-      const { data } = await (supabase as any)
-        .from('households')
-        .select()
-        .eq('invite_code', inviteCode.toUpperCase())
-        .single() as { data: { id: string } | null }
-      if (!data) { alert('Código inválido'); setLoading(false); return }
-      householdId = data.id
+      if (mode === 'create') {
+        const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+        const { data, error } = await (supabase as any)
+          .from('households')
+          .insert({ name: householdName, invite_code: code })
+          .select()
+          .single()
+        if (error) throw new Error('Erro ao criar lar: ' + error.message)
+        householdId = data.id
+      } else {
+        const { data, error } = await (supabase as any)
+          .from('households')
+          .select()
+          .eq('invite_code', inviteCode.toUpperCase())
+          .single()
+        if (error || !data) { alert('Código inválido ou não encontrado'); setLoading(false); return }
+        householdId = data.id
+      }
+
+      const { error: profileError } = await (supabase as any)
+        .from('profiles')
+        .update({ household_id: householdId })
+        .eq('id', userId)
+      if (profileError) throw new Error('Erro ao salvar perfil: ' + profileError.message)
+
+      router.push('/agora')
+    } catch (err: any) {
+      alert(err.message ?? 'Ocorreu um erro. Tente novamente.')
+      setLoading(false)
     }
-
-    await (supabase as any).from('profiles').update({ household_id: householdId }).eq('id', userId)
-    router.push('/agora')
   }
 
   if (step === 'profile') {
