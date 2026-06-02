@@ -2,9 +2,10 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/stores/appStore'
 import { useBlocksRange } from '@/lib/hooks/useBlocksRange'
+import { useSleepRange } from '@/lib/hooks/useSleepRange'
 import { PersonToggle } from '@/components/layout/PersonToggle'
 import { getCategoryConfig } from '@/lib/utils/categories'
-import { fmtDur, todayDate, addDays, startOfWeek, formatDate } from '@/lib/utils/time'
+import { fmtDur, todayDate, addDays, startOfWeek, formatDate, sleepDuration } from '@/lib/utils/time'
 
 type PeriodKey = 'hoje' | 'semana' | 'semana_passada' | 'custom'
 
@@ -43,6 +44,16 @@ export default function DashboardPage() {
 
   const { start, end } = rangeFor(period, customStart, customEnd)
   const { blocks, loading } = useBlocksRange(activePerson, start, end)
+  const { logs: sleepLogs } = useSleepRange(activePerson, start, end)
+
+  const sleepStats = useMemo(() => {
+    const valid = sleepLogs.filter(l => l.sleep_time && l.wake_time)
+    if (valid.length === 0) return null
+    const totalMin = valid.reduce((s, l) => s + sleepDuration(l.sleep_time!, l.wake_time!), 0)
+    const qualities = sleepLogs.filter(l => typeof l.quality === 'number').map(l => l.quality as number)
+    const avgQuality = qualities.length ? qualities.reduce((s, q) => s + q, 0) / qualities.length : null
+    return { avgMin: Math.round(totalMin / valid.length), nights: valid.length, avgQuality }
+  }, [sleepLogs])
 
   const dayCount = useMemo(() => {
     const s = new Date(start + 'T00:00:00').getTime()
@@ -177,6 +188,21 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {sleepStats && (
+            <div className="bg-surface rounded-2xl px-4 py-3 flex items-center gap-3 mb-4">
+              <span className="text-2xl">😴</span>
+              <div className="flex-1">
+                <div className="text-sm">
+                  Sono médio: <strong>{fmtDur(sleepStats.avgMin)}</strong>
+                  {sleepStats.nights > 1 && <span className="text-muted"> · {sleepStats.nights} noites</span>}
+                </div>
+                {sleepStats.avgQuality !== null && (
+                  <div className="text-xs text-muted">Qualidade média: {sleepStats.avgQuality.toFixed(1)}/5</div>
+                )}
+              </div>
+            </div>
+          )}
 
           {stats.houseMin > 0 && (
             <div className="bg-surface rounded-2xl px-4 py-3 flex items-center gap-3">
