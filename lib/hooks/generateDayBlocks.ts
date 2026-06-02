@@ -1,8 +1,20 @@
 import type { RoutineBlock } from '@/lib/supabase/types'
 import { frequencyMatchesDay } from '@/lib/utils/time'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Decide se a rotina pertence a este perfil.
+// Regras:
+//   'ambos'      → todos
+//   UUID válido  → só o perfil com esse ID
+//   outro texto  → valor legado (ex: 'mateus') — trata como 'ambos' para não perder dados
+function personMatchesProfile(person: string | null, profileId: string): boolean {
+  if (!person || person === 'ambos') return true
+  if (UUID_RE.test(person)) return person === profileId
+  return true // legado: texto não-UUID → todos
+}
+
 // Gera os day_blocks que faltam para um perfil numa data, a partir das rotinas ativas.
-// person nas rotinas pode ser 'ambos' (todos) ou o profile_id de um membro específico.
 export async function generateDayBlocks(
   supabase: any,
   householdId: string,
@@ -33,7 +45,7 @@ export async function generateDayBlocks(
   const toGenerate = (routines as RoutineBlock[]).filter(r =>
     !existingRoutineIds.has(r.id) &&
     frequencyMatchesDay(r.frequency ?? 'diario', dateObj) &&
-    (r.person === 'ambos' || r.person === profileId)
+    personMatchesProfile(r.person, profileId)
   )
 
   if (toGenerate.length === 0) return false
