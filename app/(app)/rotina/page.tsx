@@ -132,6 +132,7 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
   onSaved: () => void
 }) {
   const [name, setName] = useState('')
+  const { profiles } = useAppStore()
   const [category, setCategory] = useState('casa')
   const [person, setPerson] = useState('ambos')
   const [startTime, setStartTime] = useState('08:00')
@@ -266,11 +267,15 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
 
           <div>
             <label className="text-sm font-medium text-muted block mb-1.5">Responsável</label>
-            <div className="flex gap-2">
-              {(['mateus', 'esposa', 'ambos']).map(p => (
-                <button type="button" key={p} onClick={() => setPerson(p)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors capitalize ${person === p ? 'bg-accent text-white' : 'bg-surface2 text-muted'}`}>
-                  {p}
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" onClick={() => setPerson('ambos')}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${person === 'ambos' ? 'bg-accent text-white' : 'bg-surface2 text-muted'}`}>
+                Ambos
+              </button>
+              {profiles.map(p => (
+                <button type="button" key={p.id} onClick={() => setPerson(p.id)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${person === p.id ? 'bg-accent text-white' : 'bg-surface2 text-muted'}`}>
+                  {p.name}
                 </button>
               ))}
             </div>
