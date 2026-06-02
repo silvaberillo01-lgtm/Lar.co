@@ -3,18 +3,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '@/lib/stores/appStore'
 import { createClient } from '@/lib/supabase/client'
 import { getCategoryConfig, CATEGORIES } from '@/lib/utils/categories'
-import { fmtTime, fmtDur } from '@/lib/utils/time'
+import { fmtTime, fmtDur, frequencyLabel, WEEK_DAYS, daysToFrequency, frequencyToDays } from '@/lib/utils/time'
 import type { RoutineBlock } from '@/lib/supabase/types'
-
-const FREQUENCIES = [
-  { value: 'diario', label: 'Diário' },
-  { value: 'seg-sex', label: 'Seg–Sex' },
-  { value: 'seg-qua-sex', label: 'Seg/Qua/Sex' },
-  { value: 'ter-qui', label: 'Ter/Qui' },
-  { value: 'semanal', label: 'Semanal' },
-  { value: 'quinzenal', label: 'Quinzenal' },
-  { value: 'mensal', label: 'Mensal' },
-]
 
 export default function RotinaPage() {
   const { householdId } = useAppStore()
@@ -29,7 +19,7 @@ export default function RotinaPage() {
       .from('routine_blocks')
       .select('*')
       .eq('household_id', householdId)
-      .order('start_time') as { data: RoutineBlock[] | null }
+      .order('start_time')
     setRoutines(data ?? [])
     setLoading(false)
   }, [householdId, supabase])
@@ -83,7 +73,7 @@ export default function RotinaPage() {
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm" style={{ color: cat.tc }}>{r.name}</div>
                   <div className="text-xs mt-0.5" style={{ color: cat.color }}>
-                    {r.start_time ? fmtTime(r.start_time) : '–'} · {r.duration_minutes ? fmtDur(r.duration_minutes) : '–'} · {FREQUENCIES.find(f => f.value === r.frequency)?.label ?? r.frequency}
+                    {r.start_time ? fmtTime(r.start_time) : '–'} · {r.duration_minutes ? fmtDur(r.duration_minutes) : '–'} · {frequencyLabel(r.frequency ?? '')}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -124,13 +114,23 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
   const [person, setPerson] = useState('ambos')
   const [startTime, setStartTime] = useState('08:00')
   const [duration, setDuration] = useState(30)
-  const [frequency, setFrequency] = useState('diario')
+  const [selectedDays, setSelectedDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6])
   const [saving, setSaving] = useState(false)
   const supabase = createClient()
 
+  function toggleDay(day: number) {
+    setSelectedDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    )
+  }
+
+  function selectAll() { setSelectedDays([0, 1, 2, 3, 4, 5, 6]) }
+  function selectWeekdays() { setSelectedDays([1, 2, 3, 4, 5]) }
+  function selectWeekend() { setSelectedDays([0, 6]) }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!householdId) return
+    if (!householdId || selectedDays.length === 0) return
     setSaving(true)
     await (supabase as any).from('routine_blocks').insert({
       household_id: householdId,
@@ -139,7 +139,7 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
       person,
       start_time: startTime,
       duration_minutes: duration,
-      frequency,
+      frequency: daysToFrequency(selectedDays),
       active: true,
     })
     onSaved()
@@ -158,6 +158,7 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
               placeholder="Ex: Trabalho remoto"
               className="w-full px-4 py-3 rounded-xl border border-surface2 bg-background text-base focus:outline-none focus:border-accent" />
           </div>
+
           <div>
             <label className="text-sm font-medium text-muted block mb-1.5">Categoria</label>
             <div className="grid grid-cols-5 gap-2">
@@ -171,6 +172,7 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
               ))}
             </div>
           </div>
+
           <div>
             <label className="text-sm font-medium text-muted block mb-1.5">Responsável</label>
             <div className="flex gap-2">
@@ -182,6 +184,7 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
               ))}
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium text-muted block mb-1.5">Horário</label>
@@ -194,21 +197,41 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
                 className="w-full px-4 py-3 rounded-xl border border-surface2 bg-background text-base focus:outline-none focus:border-accent" />
             </div>
           </div>
+
           <div>
-            <label className="text-sm font-medium text-muted block mb-1.5">Frequência</label>
-            <div className="grid grid-cols-2 gap-2">
-              {FREQUENCIES.map(f => (
-                <button type="button" key={f.value} onClick={() => setFrequency(f.value)}
-                  className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-colors ${frequency === f.value ? 'bg-accent text-white' : 'bg-surface2 text-muted'}`}>
-                  {f.label}
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-muted">Dias da semana</label>
+              <div className="flex gap-2">
+                <button type="button" onClick={selectAll} className="text-xs text-accent font-medium">Todos</button>
+                <button type="button" onClick={selectWeekdays} className="text-xs text-accent font-medium">Seg–Sex</button>
+                <button type="button" onClick={selectWeekend} className="text-xs text-accent font-medium">Fim de semana</button>
+              </div>
+            </div>
+            <div className="flex gap-1.5">
+              {WEEK_DAYS.map(d => (
+                <button
+                  type="button"
+                  key={d.value}
+                  onClick={() => toggleDay(d.value)}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all"
+                  style={{
+                    backgroundColor: selectedDays.includes(d.value) ? '#C4622D' : '#EDE9E0',
+                    color: selectedDays.includes(d.value) ? '#fff' : '#7A7469',
+                  }}
+                >
+                  {d.label}
                 </button>
               ))}
             </div>
+            {selectedDays.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">Selecione pelo menos um dia</p>
+            )}
           </div>
+
           <div className="flex gap-3 mt-6">
             <button type="button" onClick={onClose}
               className="flex-1 py-3 bg-surface2 text-muted rounded-xl font-semibold">Cancelar</button>
-            <button type="submit" disabled={saving || !name}
+            <button type="submit" disabled={saving || !name || selectedDays.length === 0}
               className="flex-1 py-3 bg-accent text-white rounded-xl font-semibold disabled:opacity-50">
               {saving ? 'Salvando...' : 'Salvar'}
             </button>

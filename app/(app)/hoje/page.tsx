@@ -5,8 +5,9 @@ import { useBlocks } from '@/lib/hooks/useBlocks'
 import { BlockCard } from '@/components/blocks/BlockCard'
 import { EditBlockSheet } from '@/components/blocks/EditBlockSheet'
 import { PersonToggle } from '@/components/layout/PersonToggle'
-import type { DayBlock } from '@/lib/supabase/types'
+import { CATEGORIES } from '@/lib/utils/categories'
 import { todayDate } from '@/lib/utils/time'
+import type { DayBlock } from '@/lib/supabase/types'
 
 export default function HojePage() {
   const { activePerson, householdId } = useAppStore()
@@ -29,7 +30,9 @@ export default function HojePage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold">Hoje</h1>
-          <p className="text-xs text-muted mt-0.5">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <p className="text-xs text-muted mt-0.5">
+            {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
         </div>
         <PersonToggle />
       </div>
@@ -38,7 +41,7 @@ export default function HojePage() {
         <div className="text-center py-16">
           <div className="text-5xl mb-4">📋</div>
           <p className="text-muted">Nenhum bloco para hoje</p>
-          <p className="text-sm text-muted mt-1">Configure sua rotina para começar</p>
+          <p className="text-sm text-muted mt-1">Configure sua rotina ou adicione um bloco avulso</p>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -61,6 +64,106 @@ export default function HojePage() {
         onClose={() => setEditBlock(null)}
         onSave={updateBlock}
       />
+
+      {showAdd && (
+        <AddBlockSheet
+          profileId={activePerson}
+          householdId={householdId}
+          onClose={() => setShowAdd(false)}
+          onSave={async (block) => { await addBlock(block); setShowAdd(false) }}
+        />
+      )}
+    </div>
+  )
+}
+
+function AddBlockSheet({ profileId, householdId, onClose, onSave }: {
+  profileId: string | null
+  householdId: string | null
+  onClose: () => void
+  onSave: (block: Omit<DayBlock, 'id' | 'created_at'>) => Promise<void>
+}) {
+  const [name, setName] = useState('')
+  const [category, setCategory] = useState('pessoal')
+  const [startTime, setStartTime] = useState(() => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  })
+  const [duration, setDuration] = useState(30)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!profileId || !name) return
+    setSaving(true)
+    await onSave({
+      household_id: householdId,
+      profile_id: profileId,
+      routine_block_id: null,
+      name,
+      category,
+      date: todayDate(),
+      planned_start: startTime,
+      actual_start: startTime,
+      planned_duration: duration,
+      actual_duration: duration,
+      status: 'planejado',
+      notes: null,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full bg-surface rounded-t-3xl p-6 max-h-[90dvh] overflow-y-auto shadow-2xl">
+        <div className="w-12 h-1 bg-surface2 rounded-full mx-auto mb-6" />
+        <h2 className="text-lg font-bold mb-6">Adicionar bloco</h2>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-muted block mb-1.5">Nome</label>
+            <input value={name} onChange={e => setName(e.target.value)} required
+              placeholder="Ex: Reunião, Academia..."
+              autoFocus
+              className="w-full px-4 py-3 rounded-xl border border-surface2 bg-background text-base focus:outline-none focus:border-accent" />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-muted block mb-1.5">Categoria</label>
+            <div className="grid grid-cols-5 gap-2">
+              {Object.entries(CATEGORIES).map(([key, cat]) => (
+                <button type="button" key={key} onClick={() => setCategory(key)}
+                  className="flex flex-col items-center gap-1 p-2 rounded-xl text-xs transition-all"
+                  style={{ backgroundColor: category === key ? cat.bg : '#EDE9E0' }}>
+                  <span className="text-lg">{cat.emoji}</span>
+                  <span style={{ color: cat.tc }}>{cat.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium text-muted block mb-1.5">Horário</label>
+              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-surface2 bg-background text-base focus:outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-muted block mb-1.5">Duração (min)</label>
+              <input type="number" value={duration} onChange={e => setDuration(Number(e.target.value))} min={5} step={5}
+                className="w-full px-4 py-3 rounded-xl border border-surface2 bg-background text-base focus:outline-none focus:border-accent" />
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-3 bg-surface2 text-muted rounded-xl font-semibold">Cancelar</button>
+            <button type="submit" disabled={saving || !name}
+              className="flex-1 py-3 bg-accent text-white rounded-xl font-semibold disabled:opacity-50">
+              {saving ? 'Salvando...' : 'Adicionar'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

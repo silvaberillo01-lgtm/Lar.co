@@ -69,16 +69,40 @@ export function formatDate(dateStr: string): string {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
+// frequency format: "diario" | "1,2,3,4,5" (comma-separated JS day numbers 0=Sun..6=Sat)
 export function frequencyMatchesDay(frequency: string, date: Date): boolean {
-  const dow = date.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
-  switch (frequency) {
-    case 'diario': return true
-    case 'seg-sex': return dow >= 1 && dow <= 5
-    case 'seg-qua-sex': return dow === 1 || dow === 3 || dow === 5
-    case 'ter-qui': return dow === 2 || dow === 4
-    case 'semanal': return dow === 1 // mondays
-    case 'quinzenal': return dow === 1 // simplified
-    case 'mensal': return date.getDate() === 1
-    default: return false
-  }
+  if (!frequency) return false
+  if (frequency === 'diario') return true
+  const dow = date.getDay()
+  const days = frequency.split(',').map(Number)
+  return days.includes(dow)
+}
+
+export const WEEK_DAYS = [
+  { label: 'Dom', value: 0 },
+  { label: 'Seg', value: 1 },
+  { label: 'Ter', value: 2 },
+  { label: 'Qua', value: 3 },
+  { label: 'Qui', value: 4 },
+  { label: 'Sex', value: 5 },
+  { label: 'Sáb', value: 6 },
+]
+
+export function daysToFrequency(days: number[]): string {
+  if (days.length === 7) return 'diario'
+  return days.sort((a, b) => a - b).join(',')
+}
+
+export function frequencyToDays(frequency: string): number[] {
+  if (!frequency) return []
+  if (frequency === 'diario') return [0, 1, 2, 3, 4, 5, 6]
+  return frequency.split(',').map(Number)
+}
+
+export function frequencyLabel(frequency: string): string {
+  if (!frequency) return '–'
+  if (frequency === 'diario') return 'Todo dia'
+  const days = frequencyToDays(frequency)
+  if (days.length === 5 && !days.includes(0) && !days.includes(6)) return 'Seg–Sex'
+  return days.map(d => WEEK_DAYS[d]?.label ?? '').join(', ')
 }
