@@ -31,6 +31,13 @@ export default function AgoraPage() {
   })
   const nextBlock = upcomingBlocks[0]
 
+  // Blocos que já terminaram mas ainda não foram confirmados
+  const pendingBlocks = blocks.filter(b => {
+    const start = b.actual_start ?? b.planned_start ?? '00:00'
+    const dur = b.actual_duration ?? b.planned_duration ?? 30
+    return isBlockPast(start, dur, now) && (!b.status || b.status === 'planejado')
+  })
+
   function quickAction(block: DayBlock, action: 'done' | 'partial' | 'skipped' | 'plus15') {
     if (typeof navigator !== 'undefined') navigator.vibrate?.(50)
     if (action === 'plus15') {
@@ -58,6 +65,48 @@ export default function AgoraPage() {
       </div>
 
       <SleepBar profileId={activePerson} />
+
+      {pendingBlocks.length > 0 && (
+        <div className="mt-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm font-semibold">Pra confirmar</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-accent/15 text-accent font-medium">
+              {pendingBlocks.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {pendingBlocks.map(b => {
+              const cat = getCategoryConfig(b.category)
+              const start = b.actual_start ?? b.planned_start ?? '00:00'
+              const dur = b.actual_duration ?? b.planned_duration ?? 30
+              return (
+                <div key={b.id} className="rounded-2xl p-3" style={{ backgroundColor: cat.bg }}>
+                  <button onClick={() => setEditBlock(b)} className="flex items-center gap-2.5 w-full text-left active:opacity-70">
+                    <span className="text-lg">{cat.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm truncate" style={{ color: cat.tc }}>{b.name}</div>
+                      <div className="text-xs" style={{ color: cat.color }}>{fmtTime(start)} · {fmtDur(dur)} · ajustar</div>
+                    </div>
+                  </button>
+                  <div className="grid grid-cols-3 gap-2 mt-2.5">
+                    {([
+                      { action: 'done' as const, label: '✓ Feito', color: '#3A9E6F' },
+                      { action: 'partial' as const, label: '◑ Parcial', color: '#E0A030' },
+                      { action: 'skipped' as const, label: '✕ Pulei', color: '#C4622D' },
+                    ]).map(btn => (
+                      <button key={btn.action} onClick={() => quickAction(b, btn.action)}
+                        className="py-2 rounded-xl text-xs font-semibold text-white active:opacity-80"
+                        style={{ backgroundColor: btn.color }}>
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4">
         {activeBlock ? (

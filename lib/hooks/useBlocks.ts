@@ -1,57 +1,15 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { DayBlock, RoutineBlock } from '@/lib/supabase/types'
-import { todayDate, frequencyMatchesDay } from '@/lib/utils/time'
+import type { DayBlock } from '@/lib/supabase/types'
+import { todayDate } from '@/lib/utils/time'
+import { generateDayBlocks } from './generateDayBlocks'
 
 export function useBlocks(profileId: string | null, date?: string) {
   const [blocks, setBlocks] = useState<DayBlock[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
   const targetDate = date ?? todayDate()
-
-  const generateDayBlocks = useCallback(async (householdId: string, pid: string) => {
-    const { data: existing } = await (supabase as any)
-      .from('day_blocks')
-      .select('routine_block_id')
-      .eq('profile_id', pid)
-      .eq('date', targetDate) as { data: Array<{ routine_block_id: string | null }> | null }
-
-    const existingRoutineIds = new Set(existing?.map((b: { routine_block_id: string | null }) => b.routine_block_id).filter(Boolean))
-
-    const { data: routines } = await (supabase as any)
-      .from('routine_blocks')
-      .select('*')
-      .eq('household_id', householdId)
-      .eq('active', true) as { data: RoutineBlock[] | null }
-
-    if (!routines) return
-
-    const dateObj = new Date(targetDate + 'T00:00:00')
-    const toGenerate = routines.filter((r: RoutineBlock) =>
-      !existingRoutineIds.has(r.id) &&
-      frequencyMatchesDay(r.frequency ?? 'diario', dateObj) &&
-      (r.person === 'ambos' || r.person === pid)
-    )
-
-    if (toGenerate.length === 0) return
-
-    const inserts = toGenerate.map((r: RoutineBlock) => ({
-      household_id: householdId,
-      profile_id: pid,
-      routine_block_id: r.id,
-      name: r.name,
-      category: r.category,
-      date: targetDate,
-      planned_start: r.start_time,
-      actual_start: r.start_time,
-      planned_duration: r.duration_minutes,
-      actual_duration: r.duration_minutes,
-      status: 'planejado',
-    }))
-
-    await (supabase as any).from('day_blocks').insert(inserts)
-  }, [targetDate, supabase])
 
   const fetchBlocks = useCallback(async () => {
     if (!profileId) { setLoading(false); return }
@@ -64,7 +22,7 @@ export function useBlocks(profileId: string | null, date?: string) {
       .single() as { data: { household_id: string | null } | null }
 
     if (profile?.household_id) {
-      await generateDayBlocks(profile.household_id, profileId)
+      await generateDayBlocks(supabase, profile.household_id, profileId, targetDate)
     }
 
     const { data } = await (supabase as any)
@@ -76,7 +34,7 @@ export function useBlocks(profileId: string | null, date?: string) {
 
     setBlocks(data ?? [])
     setLoading(false)
-  }, [profileId, targetDate, supabase, generateDayBlocks])
+  }, [profileId, targetDate, supabase])
 
   useEffect(() => {
     fetchBlocks()

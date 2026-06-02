@@ -6,6 +6,28 @@ import { getCategoryConfig, CATEGORIES } from '@/lib/utils/categories'
 import { fmtTime, fmtDur, frequencyLabel, WEEK_DAYS, daysToFrequency, frequencyToDays } from '@/lib/utils/time'
 import type { RoutineBlock } from '@/lib/supabase/types'
 
+const CUSTOM_CATS_KEY = 'lar_custom_categories'
+const EXTRA_EMOJIS = ['🎯','📚','🎮','🍳','🏋️','🧹','💻','🎵','🌿','🛒','🎨','📝','🧘','🚗','🏃']
+
+type CustomCat = { label: string; emoji: string }
+
+function loadCustomCats(): Record<string, CustomCat> {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(localStorage.getItem(CUSTOM_CATS_KEY) ?? '{}') } catch { return {} }
+}
+function saveCustomCats(cats: Record<string, CustomCat>) {
+  localStorage.setItem(CUSTOM_CATS_KEY, JSON.stringify(cats))
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+function minutesToTime(mins: number): string {
+  const total = ((mins % 1440) + 1440) % 1440
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
 export default function RotinaPage() {
   const { householdId } = useAppStore()
   const [routines, setRoutines] = useState<RoutineBlock[]>([])
@@ -110,13 +132,29 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
   onSaved: () => void
 }) {
   const [name, setName] = useState('')
+  const { profiles } = useAppStore()
   const [category, setCategory] = useState('casa')
   const [person, setPerson] = useState('ambos')
   const [startTime, setStartTime] = useState('08:00')
-  const [duration, setDuration] = useState(30)
+  const [endTime, setEndTime] = useState('08:30')
   const [selectedDays, setSelectedDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6])
   const [saving, setSaving] = useState(false)
+  const [customCats, setCustomCats] = useState<Record<string, CustomCat>>(() => loadCustomCats())
+  const [showNewCat, setShowNewCat] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatEmoji, setNewCatEmoji] = useState('🎯')
   const supabase = createClient()
+
+  const duration = Math.max(5, timeToMinutes(endTime) - timeToMinutes(startTime) + (timeToMinutes(endTime) < timeToMinutes(startTime) ? 1440 : 0))
+
+  function handleStartChange(val: string) {
+    setStartTime(val)
+    setEndTime(minutesToTime(timeToMinutes(val) + duration))
+  }
+
+  function handleEndChange(val: string) {
+    setEndTime(val)
+  }
 
   function toggleDay(day: number) {
     setSelectedDays(prev =>
@@ -128,7 +166,19 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
   function selectWeekdays() { setSelectedDays([1, 2, 3, 4, 5]) }
   function selectWeekend() { setSelectedDays([0, 6]) }
 
-  async function handleSave(e: React.FormEvent) {
+  function addCustomCategory() {
+    if (!newCatName.trim()) return
+    const key = `custom_${Date.now()}`
+    const updated = { ...customCats, [key]: { label: newCatName.trim(), emoji: newCatEmoji } }
+    setCustomCats(updated)
+    saveCustomCats(updated)
+    setCategory(key)
+    setShowNewCat(false)
+    setNewCatName('')
+    setNewCatEmoji('🎯')
+  }
+
+  async function handleSave(e: { preventDefault: () => void }) {
     e.preventDefault()
     if (!householdId || selectedDays.length === 0) return
     setSaving(true)
@@ -143,6 +193,13 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
       active: true,
     })
     onSaved()
+  }
+
+  const allCats: Record<string, { label: string; emoji: string; color: string; bg: string; tc: string }> = {
+    ...(CATEGORIES as Record<string, { label: string; emoji: string; color: string; bg: string; tc: string }>),
+    ...Object.fromEntries(
+      Object.entries(customCats).map(([k, v]) => { const c = v as CustomCat; return [k, { label: c.label, emoji: c.emoji, color: '#7A7469', bg: '#EDE9E0', tc: '#5A5450' }] })
+    ),
   }
 
   return (
@@ -162,39 +219,84 @@ function AddRoutineSheet({ householdId, onClose, onSaved }: {
           <div>
             <label className="text-sm font-medium text-muted block mb-1.5">Categoria</label>
             <div className="grid grid-cols-5 gap-2">
-              {Object.entries(CATEGORIES).map(([key, cat]) => (
+              {Object.entries(allCats).map(([key, cat]) => (
                 <button type="button" key={key} onClick={() => setCategory(key)}
                   className="flex flex-col items-center gap-1 p-2 rounded-xl text-xs transition-all"
                   style={{ backgroundColor: category === key ? cat.bg : '#EDE9E0' }}>
                   <span className="text-lg">{cat.emoji}</span>
-                  <span style={{ color: cat.tc }}>{cat.label}</span>
+                  <span style={{ color: cat.tc }} className="truncate w-full text-center">{cat.label}</span>
+                </button>
+              ))}
+              <button type="button" onClick={() => setShowNewCat(v => !v)}
+                className="flex flex-col items-center gap-1 p-2 rounded-xl text-xs transition-all"
+                style={{ backgroundColor: showNewCat ? '#EDE9E0' : '#F5F3EE' }}>
+                <span className="text-lg">＋</span>
+                <span className="text-muted">Nova</span>
+              </button>
+            </div>
+
+            {showNewCat && (
+              <div className="mt-3 p-3 bg-surface2 rounded-xl space-y-2">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <input value={newCatName} onChange={e => setNewCatName(e.target.value)}
+                      placeholder="Nome da categoria"
+                      className="w-full px-3 py-2 rounded-lg border border-surface2 bg-background text-sm focus:outline-none focus:border-accent" />
+                  </div>
+                  <button type="button" onClick={addCustomCategory}
+                    disabled={!newCatName.trim()}
+                    className="px-3 py-2 bg-accent text-white rounded-lg text-sm font-medium disabled:opacity-40">
+                    Criar
+                  </button>
+                </div>
+                <div>
+                  <p className="text-xs text-muted mb-1.5">Escolha um emoji</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {EXTRA_EMOJIS.map(em => (
+                      <button type="button" key={em} onClick={() => setNewCatEmoji(em)}
+                        className="w-8 h-8 rounded-lg text-base flex items-center justify-center transition-all"
+                        style={{ backgroundColor: newCatEmoji === em ? '#C4622D30' : 'transparent', outline: newCatEmoji === em ? '2px solid #C4622D' : 'none' }}>
+                        {em}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-muted block mb-1.5">Responsável</label>
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" onClick={() => setPerson('ambos')}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${person === 'ambos' ? 'bg-accent text-white' : 'bg-surface2 text-muted'}`}>
+                Ambos
+              </button>
+              {profiles.map(p => (
+                <button type="button" key={p.id} onClick={() => setPerson(p.id)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${person === p.id ? 'bg-accent text-white' : 'bg-surface2 text-muted'}`}>
+                  {p.name}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-muted block mb-1.5">Responsável</label>
-            <div className="flex gap-2">
-              {(['mateus', 'esposa', 'ambos']).map(p => (
-                <button type="button" key={p} onClick={() => setPerson(p)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors capitalize ${person === p ? 'bg-accent text-white' : 'bg-surface2 text-muted'}`}>
-                  {p}
-                </button>
-              ))}
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-muted">Horário</label>
+              <span className="text-xs text-muted bg-surface2 px-2 py-0.5 rounded-full">{fmtDur(duration)}</span>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium text-muted block mb-1.5">Horário</label>
-              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-surface2 bg-background text-base focus:outline-none focus:border-accent" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-muted block mb-1.5">Duração (min)</label>
-              <input type="number" value={duration} onChange={e => setDuration(Number(e.target.value))} min={5} step={5}
-                className="w-full px-4 py-3 rounded-xl border border-surface2 bg-background text-base focus:outline-none focus:border-accent" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted block mb-1">Início</label>
+                <input type="time" value={startTime} onChange={e => handleStartChange(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-surface2 bg-background text-base focus:outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="text-xs text-muted block mb-1">Fim</label>
+                <input type="time" value={endTime} onChange={e => handleEndChange(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-surface2 bg-background text-base focus:outline-none focus:border-accent" />
+              </div>
             </div>
           </div>
 

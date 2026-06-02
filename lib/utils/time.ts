@@ -57,7 +57,22 @@ export function sleepDuration(sleepTime: string, wakeTime: string): number {
 }
 
 export function todayDate(): string {
-  return new Date().toISOString().split('T')[0]
+  // Data LOCAL (não UTC) — evita virar o dia errado à noite em fusos negativos
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Início da semana (segunda-feira) para a data informada
+export function startOfWeek(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  const diff = (d.getDay() + 6) % 7 // dias desde a última segunda
+  return addDays(dateStr, -diff)
 }
 
 export function weekDayName(date: Date): string {

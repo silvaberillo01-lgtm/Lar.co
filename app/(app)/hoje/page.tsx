@@ -4,6 +4,7 @@ import { useAppStore } from '@/lib/stores/appStore'
 import { useBlocks } from '@/lib/hooks/useBlocks'
 import { BlockCard } from '@/components/blocks/BlockCard'
 import { EditBlockSheet } from '@/components/blocks/EditBlockSheet'
+import { DayTimeline } from '@/components/blocks/DayTimeline'
 import { PersonToggle } from '@/components/layout/PersonToggle'
 import { CATEGORIES } from '@/lib/utils/categories'
 import { todayDate } from '@/lib/utils/time'
@@ -14,6 +15,8 @@ export default function HojePage() {
   const { blocks, loading, updateBlock, addBlock } = useBlocks(activePerson)
   const [editBlock, setEditBlock] = useState<DayBlock | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [addStart, setAddStart] = useState<string | null>(null)
+  const [view, setView] = useState<'lista' | 'timeline'>('lista')
 
   if (loading) {
     return (
@@ -44,15 +47,32 @@ export default function HojePage() {
           <p className="text-sm text-muted mt-1">Configure sua rotina ou adicione um bloco avulso</p>
         </div>
       ) : (
-        <div className="space-y-2.5">
-          {blocks.map(b => (
-            <BlockCard key={b.id} block={b} onClick={() => setEditBlock(b)} />
-          ))}
-        </div>
+        <>
+          <div className="flex gap-1.5 bg-surface2 rounded-full p-1 mb-4 w-fit">
+            {([['lista', 'Lista'], ['timeline', 'Linha do tempo']] as const).map(([key, label]) => (
+              <button key={key} onClick={() => setView(key)}
+                className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  view === key ? 'bg-surface shadow-sm' : 'text-muted'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {view === 'timeline' ? (
+            <DayTimeline blocks={blocks} onPick={(start) => { setAddStart(start); setShowAdd(true) }} />
+          ) : (
+            <div className="space-y-2.5">
+              {blocks.map(b => (
+                <BlockCard key={b.id} block={b} onClick={() => setEditBlock(b)} />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <button
-        onClick={() => setShowAdd(true)}
+        onClick={() => { setAddStart(null); setShowAdd(true) }}
         className="fixed bottom-24 right-4 md:bottom-6 md:right-6 w-14 h-14 bg-accent text-white rounded-full shadow-lg text-2xl flex items-center justify-center active:scale-95 transition-transform z-30"
       >
         +
@@ -69,23 +89,26 @@ export default function HojePage() {
         <AddBlockSheet
           profileId={activePerson}
           householdId={householdId}
-          onClose={() => setShowAdd(false)}
-          onSave={async (block) => { await addBlock(block); setShowAdd(false) }}
+          initialStart={addStart}
+          onClose={() => { setShowAdd(false); setAddStart(null) }}
+          onSave={async (block) => { await addBlock(block); setShowAdd(false); setAddStart(null) }}
         />
       )}
     </div>
   )
 }
 
-function AddBlockSheet({ profileId, householdId, onClose, onSave }: {
+function AddBlockSheet({ profileId, householdId, initialStart, onClose, onSave }: {
   profileId: string | null
   householdId: string | null
+  initialStart?: string | null
   onClose: () => void
   onSave: (block: Omit<DayBlock, 'id' | 'created_at'>) => Promise<void>
 }) {
   const [name, setName] = useState('')
   const [category, setCategory] = useState('pessoal')
   const [startTime, setStartTime] = useState(() => {
+    if (initialStart) return initialStart
     const now = new Date()
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   })
