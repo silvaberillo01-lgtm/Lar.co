@@ -22,11 +22,30 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
-
   const { pathname } = request.nextUrl
   const publicPaths = ['/login', '/onboarding', '/update-password']
   const isPublic = publicPaths.some(p => pathname.startsWith(p))
+
+  // A verificação de sessão é uma chamada de rede ao Supabase. Se o projeto
+  // estiver indisponível/pausado, ela pode travar e fazer o middleware estourar
+  // o tempo limite da Vercel (504 MIDDLEWARE_INVOCATION_TIMEOUT) em TODAS as
+  // rotas. Aplicamos um timeout e tratamos falha como "não autenticado" para
+  // degradar de forma graciosa em vez de derrubar o site inteiro.
+  let user = null
+  try {
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('auth.getUser timeout')), 3000)
+    )
+    const result = await Promise.race([supabase.auth.getUser(), timeout])
+    user = result.data.user
+  } catch (err) {
+    console.error('[middleware] falha ao verificar sessão:', err)
+    // Em rota pública seguimos normalmente; em rota protegida mandamos pro login.
+    if (!isPublic) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    return supabaseResponse
+  }
 
   // Usuário não autenticado → login
   if (!user && !isPublic) {
